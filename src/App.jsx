@@ -9,35 +9,22 @@ import {
 } from "react-bootstrap";
 import { useState, useEffect } from "react";
 
-const clientId = import.meta.env.VITE_CLIENT_ID;
-const clientSecret = import.meta.env.VITE_CLIENT_SECRET;
-
 function App() {
   const [searchInput, setSearchInput] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [albums, setAlbums] = useState([]);
 
+  // Get token from Netlify function instead of exposing client_secret
   useEffect(() => {
-    let authParams = {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body:
-        "grant_type=client_credentials&client_id=" +
-        clientId +
-        "&client_secret=" +
-        clientSecret,
-    };
-
-    fetch("https://accounts.spotify.com/api/token", authParams)
-      .then((result) => result.json())
-      .then((data) => {
-        setAccessToken(data.access_token);
-      });
+    fetch("/.netlify/functions/getSpotifyToken")
+      .then((res) => res.json())
+      .then((data) => setAccessToken(data.access_token))
+      .catch((err) => console.error("Error fetching token:", err));
   }, []);
 
   async function search() {
+    if (!accessToken) return;
+
     let artistParams = {
       method: "GET",
       headers: {
@@ -48,24 +35,28 @@ function App() {
 
     // Get Artist
     const artistID = await fetch(
-      "https://api.spotify.com/v1/search?q=" + searchInput + "&type=artist",
+      `https://api.spotify.com/v1/search?q=${searchInput}&type=artist`,
       artistParams
     )
       .then((result) => result.json())
       .then((data) => {
+        if (!data.artists.items.length) return null;
         return data.artists.items[0].id;
       });
 
+    if (!artistID) {
+      alert("No artist found");
+      return;
+    }
+
     // Get Artist Albums
     await fetch(
-      "https://api.spotify.com/v1/artists/" +
-        artistID +
-        "/albums?include_groups=album&market=US&limit=50",
+      `https://api.spotify.com/v1/artists/${artistID}/albums?include_groups=album&market=US&limit=50`,
       artistParams
     )
       .then((result) => result.json())
       .then((data) => {
-        setAlbums(data.items);
+        setAlbums(data.items || []);
       });
   }
 
@@ -107,61 +98,55 @@ function App() {
             alignContent: "center",
           }}
         >
-          {albums.map((album) => {
-            return (
-              <Card
-                key={album.id}
+          {albums.map((album) => (
+            <Card
+              key={album.id}
+              style={{
+                backgroundColor: "white",
+                margin: "10px",
+                borderRadius: "5px",
+                marginBottom: "30px",
+              }}
+            >
+              <Card.Img
+                width={200}
+                src={album.images[0]?.url}
                 style={{
-                  backgroundColor: "white",
-                  margin: "10px",
-                  borderRadius: "5px",
-                  marginBottom: "30px",
+                  borderRadius: "4%",
                 }}
-              >
-                <Card.Img
-                  width={200}
-                  src={album.images[0].url}
+              />
+              <Card.Body>
+                <Card.Title
                   style={{
-                    borderRadius: "4%",
+                    whiteSpace: "wrap",
+                    fontWeight: "bold",
+                    maxWidth: "200px",
+                    fontSize: "18px",
+                    marginTop: "10px",
+                    color: "black",
                   }}
-                />
-                <Card.Body>
-                  <Card.Title
-                    style={{
-                      whiteSpace: "wrap",
-                      fontWeight: "bold",
-                      maxWidth: "200px",
-                      fontSize: "18px",
-                      marginTop: "10px",
-                      color: "black",
-                    }}
-                  >
-                    {album.name}
-                  </Card.Title>
-                  <Card.Text
-                    style={{
-                      color: "black",
-                    }}
-                  >
-                    Release Date: <br /> {album.release_date}
-                  </Card.Text>
-                  <Button
-                    href={album.external_urls.spotify}
-                    style={{
-                      backgroundColor: "black",
-                      color: "white",
-                      fontWeight: "bold",
-                      fontSize: "15px",
-                      borderRadius: "5px",
-                      padding: "10px",
-                    }}
-                  >
-                    Album Link
-                  </Button>
-                </Card.Body>
-              </Card>
-            );
-          })}
+                >
+                  {album.name}
+                </Card.Title>
+                <Card.Text style={{ color: "black" }}>
+                  Release Date: <br /> {album.release_date}
+                </Card.Text>
+                <Button
+                  href={album.external_urls.spotify}
+                  style={{
+                    backgroundColor: "black",
+                    color: "white",
+                    fontWeight: "bold",
+                    fontSize: "15px",
+                    borderRadius: "5px",
+                    padding: "10px",
+                  }}
+                >
+                  Album Link
+                </Button>
+              </Card.Body>
+            </Card>
+          ))}
         </Row>
       </Container>
     </>
